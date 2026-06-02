@@ -1,0 +1,123 @@
+### Get auth token
+
+POST https://identity.flashfood.com/oauth/token
+Content-Type: application/json
+
+{
+    "audience": "https://api.flashfood.com/",
+    "client_id": "u2oBL41A94tidOe5KhoCV7R7tHnosgqg",
+    "grant_type": "http://auth0.com/oauth/grant-type/password-realm",
+    "password": "OLgaglo19881987!",
+    "realm": "flashfood-shoppers",
+    "scope": "offline_access openid profile email",
+    "username": "denis.twitter@gmail.com"
+}
+
+###
+GET https://app.shopper.flashfood.com/api/v1/stores?storesWithItemsLimit=10&includeItems=true&searchLatitude=42.77372603016238&searchLongitude=-86.106069101063&userLocationLatitude=42.77372603016238&userLocationLongitude=-86.106069101063&maxDistance=75000
+Content-Type: application/json
+Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6IlFqVkNNMFJCUWtZNVFrUXhRa1pGUkRCRk9VVXlNalE0TTBZMU1UVXhRekl3T0RjME5rTXdOdyJ9.eyJpc3MiOiJodHRwczovL2lkZW50aXR5LmZsYXNoZm9vZC5jb20vIiwic3ViIjoiYXV0aDB8NmExOGY5OThjYmVmN2ViM2IzMzRlYmFmIiwiYXVkIjpbImh0dHBzOi8vYXBpLmZsYXNoZm9vZC5jb20vIiwiaHR0cHM6Ly9mbGFzaGZvb2Rjby5hdXRoMC5jb20vdXNlcmluZm8iXSwiaWF0IjoxNzgwMjgxNTM1LCJleHAiOjE3ODAzNjc5MzUsInNjb3BlIjoib3BlbmlkIHByb2ZpbGUgZW1haWwgb2ZmbGluZV9hY2Nlc3MiLCJndHkiOiJwYXNzd29yZCIsImF6cCI6InUyb0JMNDFBOTR0aWRPZTVLaG9DVjdSN3RIbm9zZ3FnIiwicGVybWlzc2lvbnMiOltdfQ.JfB6H_h5W_dmr8usBdyhogeEmf3GzqZUd7hPgotNo3Ku37z6kVpqiP5IKtOvZqWikupboJGAhwPRHVuWegTYWThBZk0LdL6yOd5CdnfARkr3jnn72WYz8fI-6IJIBjgIFtlb25fqycOAtnDqCrvxTnzG_aMpeJ9BP704xenqoLnDDNe87akwCFT9araWPqwlMLKhyx3vPFZPMSSdwdIJdsKJb60eIyODZqU2CBprktK6p9k3ztcOI7mEO_WXXxPol5QoT8Km7Lta65Grv_YeVJzKsEOONwjSwVxj95wmkp1kCkbGiKxZVHDbSG2VdM_3q6_3CCW50oHtdFWCOp7BrQ
+
+### Admin token: Basic YWRtaW46YWRtaW4=
+POST http://localhost:4111/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "username": "testuser2",
+  "password": "!@#qweQWE1"
+}
+
+### Positive test: Admin can create a new user with correct data
+POST http://localhost:4111/api/v1/admin/users
+Content-Type: application/json
+Authorization: Basic YWRtaW46YWRtaW4=
+
+{
+  "username": "{{$random.uuid}}",
+  "password": "{{$random.uuid}}",
+  "role": "USER"
+}
+
+### Negative test: Admin cannot create a new user with blank username
+POST http://localhost:4111/api/v1/admin/users
+Content-Type: application/json
+Authorization: Basic YWRtaW46YWRtaW4=
+
+{
+  "username": "",
+  "password": "{{$random.uuid}}",
+  "role": "USER"
+}
+
+### Negative test: Admin cannot create a new user with username 2 or 16 characters
+POST http://localhost:4111/api/v1/admin/users
+Content-Type: application/json
+Authorization: Basic YWRtaW46YWRtaW4=
+
+{
+  "username": "ab",
+  "password": "!@#qweQWE1",
+  "role": "USER"
+}
+
+### Negative test: Admin cannot create a new user with username contains !@#$%^&*(){}[]\|;':"./,<>? characters
+POST http://localhost:4111/api/v1/admin/users
+Content-Type: application/json
+Authorization: Basic YWRtaW46YWRtaW4=
+
+{
+"username": "!@#$%^&*(){}[]|",
+"password": "!@#qweQWE1",
+"role": "USER"
+}
+
+### Negative test: Admin cannot create a new user with blank password
+POST http://localhost:4111/api/v1/admin/users
+Content-Type: application/json
+Authorization: Basic YWRtaW46YWRtaW4=
+
+{
+  "username": "{{$random.name.lastName}}",
+  "password": "   ",
+  "role": "USER"
+}
+
+### Negative test: Admin cannot create a new user with password without one lower case character
+### Negative test: Admin cannot create a new user with password without digits
+### Negative test: Admin cannot create a new user with password without one upper case character
+### Negative test: Admin cannot create a new user with password without one special character
+### Negative test: Admin cannot create a new user with password with spaces
+
+### Negative test: Admin cannot create a new user with role not from list "ADMIN', 'USER'
+POST http://localhost:4111/api/v1/admin/users
+Content-Type: application/json
+Authorization: Basic YWRtaW46YWRtaW4=
+
+{
+  "username": "abc123",
+  "password": "!@#qweQWE1",
+  "role": "USER"
+}
+
+###
+
+
+POST http://localhost:4111/api/v1/admin/users
+Content-Type: application/json
+Authorization: Basic YWRtaW46YWRtaW4=
+
+{
+  "username": "{{$random.name.lastName}}",
+  "password": "vbDB1@",
+  "role": "USER"
+}
+
+### Positive test: Authorized user can create account
+POST http://localhost:4111/api/v1/accounts
+Content-Type: application/json
+Authorization: Basic YWRtaW5EZW5uaXMxOmFkbWluRGVubmlzMSE=
+
+### Positive test: Authorized user can check account was created
+GET http://localhost:4111/api/v1/customer/accounts
+Content-Type: application/json
+Authorization: Basic YWRtaW5EZW5uaXMxOmFkbWluRGVubmlzMSE=
