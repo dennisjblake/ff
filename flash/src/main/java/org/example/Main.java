@@ -26,7 +26,7 @@ public class Main {
 
         log("🚀 Starting Flashfood 4-hour session...");
 
-        for (int i = 0; i < 80; i++) {
+        for (int i = 0; i < 118; i++) {
 
             // ✅ graceful stop after 20:00 Detroit
             int hour = ZonedDateTime.now(ZoneId.of("America/Detroit")).getHour();
