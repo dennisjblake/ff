@@ -2,23 +2,29 @@ name: Flashfood Bot
 
 on:
   schedule:
-    # 08:00–19:59 Chicago (13:00–23:59 UTC)
-    - cron: "*/3 13-23 * * *"
-
-    # 20:00–20:59 Chicago (00:00–01:59 UTC)
-    - cron: "*/3 0-1 * * *"
-
+    # 08:00–19:59 Detroit (12:00–23:59 UTC)
+    - cron: "*/3 12-23 * * *"
+    
   workflow_dispatch:
 
 jobs:
   run:
-    runs-on: ubuntu-latest 
+    runs-on: ubuntu-latest
+
     permissions:
-        contents: write
+      contents: write
 
     steps:
       - name: Checkout repo
         uses: actions/checkout@v3
+
+      - name: Cache Maven dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.m2/repository
+          key: maven-${{ runner.os }}-${{ hashFiles('flash/pom.xml') }}
+          restore-keys: |
+            maven-${{ runner.os }}-
 
       - name: Set up Java
         uses: actions/setup-java@v3
@@ -27,10 +33,11 @@ jobs:
           java-version: 17
 
       - name: Build project
-        run: mvn clean package
+        run: mvn package -q
         working-directory: flash
 
       - name: Run bot
+        working-directory: flash
         env:
           CLIENT_ID: ${{ secrets.CLIENT_ID }}
           REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
@@ -38,7 +45,6 @@ jobs:
           FF_PASSWORD: ${{ secrets.FF_PASSWORD }}
           TG_TOKEN: ${{ secrets.TG_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-        working-directory: flash
         run: java -jar target/*.jar
 
       - name: Commit seen.txt
@@ -48,6 +54,7 @@ jobs:
 
           git add flash/seen.txt
 
-          git diff --cached --quiet || git commit -m "Update seen.txt"
+          git commit --amend --no-edit || echo "No changes"
 
-          git push
+          git push --force
+``
