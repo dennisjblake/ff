@@ -26,6 +26,7 @@ jobs:
 
       - name: Build project
         run: mvn clean package
+        working-directory: flash
 
       - name: Run bot
         env:
@@ -35,6 +36,7 @@ jobs:
           FF_PASSWORD: ${{ secrets.FF_PASSWORD }}
           TG_TOKEN: ${{ secrets.TG_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+        working-directory: flash
         run: java -jar target/*.jar
 
       - name: Commit seen.txt
@@ -42,7 +44,7 @@ jobs:
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
 
-          git add seen.txt
+          git add flash/seen.txt
 
           git diff --cached --quiet || git commit -m "Update seen.txt"
 
