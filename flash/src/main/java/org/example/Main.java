@@ -20,22 +20,39 @@ public class Main {
                     "&storeIds=5f766e5d21b06610425b1842" +
                     "&storeIds=5f766e5d21b06610425b1848";
 
-    private static final Duration TTL = Duration.ofDays(5);
+    private static final Duration TTL = Duration.ofDays(4);
 
     public static void main(String[] args) throws Exception {
 
-        log("🚀 Starting Flashfood monitor...");
+        log("🚀 Starting Flashfood 4-hour session...");
+
+        for (int i = 0; i < 80; i++) {
+
+            try {
+                runOnce();
+            } catch (Exception e) {
+                log("❌ Error: " + e.getMessage());
+            }
+
+            if (i < 79) {
+                log("⏳ Sleeping 3 minutes...");
+                Thread.sleep(180_000);
+            }
+        }
+
+        log("✅ 4-hour session finished");
+    }
+
+    private static void runOnce() throws Exception {
 
         Map<String, Instant> seen = loadSeen();
         cleanup(seen);
 
         String token = resolveToken();
-
         List<Map<String, Object>> items = fetchItems(token);
 
         log("📦 Total items: " + items.size());
 
-        // ✅ сортировка: Holland first + cheapest first
         items.sort(
                 Comparator
                         .comparing(Main::getStorePriority)
@@ -54,8 +71,6 @@ public class Main {
             String id = item.get("id").toString();
             String name = item.get("name").toString();
             double price = Double.parseDouble(item.get("price").toString());
-
-            log("🔎 Checking: " + name + " ($" + price + ")");
 
             if (seen.containsKey(id)) continue;
 
@@ -83,18 +98,12 @@ public class Main {
         log("Checked: " + totalChecked);
         log("Sent: " + matches);
         log("Seen total: " + seen.size());
-
-        log("✅ Done.");
     }
-
-    // ================= TOKEN =================
 
     private static String resolveToken() throws Exception {
         try {
-            log("Using refresh token...");
             return refreshToken();
         } catch (Exception e) {
-            log("Refresh failed → full login...");
             return loginToken();
         }
     }
@@ -141,14 +150,11 @@ public class Main {
         return (String) json.get("access_token");
     }
 
-    // ================= FETCH =================
-
     private static List<Map<String, Object>> fetchItems(String token) throws Exception {
 
         HttpRequest req = HttpRequest.newBuilder()
                 .uri(URI.create(API_URL))
                 .header("Authorization", "Bearer " + token)
-                .header("Accept", "application/json")
                 .GET()
                 .build();
 
@@ -164,9 +170,7 @@ public class Main {
         for (Map<String, Object> store : stores) {
 
             String storeName = store.get("name").toString();
-
-            List<Map<String, Object>> items =
-                    (List<Map<String, Object>>) store.get("items");
+            List<Map<String, Object>> items = (List<Map<String, Object>>) store.get("items");
 
             if (items == null) continue;
 
@@ -180,117 +184,67 @@ public class Main {
         return result;
     }
 
-    // ================= FILTER =================
-
     private static boolean isInteresting(String name, double price) {
 
         name = name.toLowerCase();
 
-        if ((name.contains("fruit bundle")
-                || name.contains("veggie bundle")
-                || name.contains("mixed produce bundle")
-                || name.contains("produce bundle")))
-            return price <= 3.01;
-
-        if (name.contains("kombucha"))
-            return price <= 2;
-
-        if (name.contains("mushrooms"))
-            return price <= 2;
-        if (name.contains("steak"))
-            return price <= 10;
-        if (name.contains("pork"))
-            return price <= 10;
-        if (name.contains("ribs"))
-            return price <= 10;
-
-        if (name.contains("fish") || name.contains("salmon"))
-            return price <= 5;
+        if (name.contains("bundle")) return price <= 3.01;
+        if (name.contains("kombucha") || name.contains("mushrooms")) return price <= 2;
+        if (name.contains("pork")) return price <= 10;
+        if (name.contains("fish") || name.contains("salmon")) return price <= 5;
 
         return false;
     }
 
-    // ================= SORT =================
-
     private static int getStorePriority(Map<String, Object> item) {
-
-        String storeId = item.get("storeId").toString();
-
-        if (storeId.equals("5f766e5d21b06610425b1851") ||
-                storeId.equals("5f766e5d21b06610425b183e"))
-            return 1;
-
-        if (storeId.equals("5f766e5d21b06610425b1842")) return 2;
-        if (storeId.equals("5f766e5d21b06610425b1854")) return 3;
-        if (storeId.equals("5f766e5d21b06610425b1840")) return 4;
-        if (storeId.equals("5f766e5d21b06610425b1848")) return 5;
-
+        String id = item.get("storeId").toString();
+        if (id.equals("5f766e5d21b06610425b1851")) return 1;
         return 100;
     }
 
-    // ================= TELEGRAM =================
-
     private static void sendPhoto(Map<String, Object> item) throws Exception {
 
-        HttpClient client = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(10))
-                .build();
-
-        String name = item.get("name").toString();
-        double price = Double.parseDouble(item.get("price").toString());
-        String store = item.get("storeName").toString();
-
-        String priceStr = String.format("%.2f", price);
-
-        Long bestBefore = Long.parseLong(item.get("bestBeforeDate").toString());
-        String expiry = formatDate(bestBefore);
-
-        List<String> images = (List<String>) item.get("imageGallery");
-
-        String imageUrl = (images != null && !images.isEmpty())
-                ? images.get(0)
-                : item.get("imageUrl").toString();
+        String price = String.format("%.2f",
+                Double.parseDouble(item.get("price").toString())
+        );
 
         String caption =
-                "$" + priceStr + "\n" +
-                        "📍 " + store + "\n" +
-                        name + "\n" +
-                        "🗓 " + expiry;
+                "$" + price + "\n" +
+                        "📍 " + item.get("storeName") + "\n" +
+                        item.get("name") + "\n" +
+                        "🗓 " + formatDate(Long.parseLong(item.get("bestBeforeDate").toString()));
 
         String url = "https://api.telegram.org/bot"
-                + System.getenv("TG_TOKEN")
-                + "/sendPhoto";
+                + System.getenv("TG_TOKEN") + "/sendPhoto";
 
         String body = "chat_id=" + System.getenv("TG_CHAT_ID")
-                + "&photo=" + imageUrl
+                + "&photo=" + item.get("imageUrl")
                 + "&caption=" + caption;
 
-        HttpRequest req = HttpRequest.newBuilder()
-                .uri(URI.create(url))
-                .header("Content-Type", "application/x-www-form-urlencoded")
-                .POST(HttpRequest.BodyPublishers.ofString(body))
-                .build();
-
-        client.send(req, HttpResponse.BodyHandlers.discarding());
+        HttpClient.newHttpClient().send(
+                HttpRequest.newBuilder()
+                        .uri(URI.create(url))
+                        .header("Content-Type", "application/x-www-form-urlencoded")
+                        .POST(HttpRequest.BodyPublishers.ofString(body))
+                        .build(),
+                HttpResponse.BodyHandlers.discarding()
+        );
     }
 
     private static String formatDate(Long ts) {
-        Instant i = Instant.ofEpochSecond(ts);
-        return i.atZone(ZoneId.of("America/Detroit")).toLocalDate().toString();
+        return Instant.ofEpochSecond(ts)
+                .atZone(ZoneId.of("America/Detroit"))
+                .toLocalDate().toString();
     }
 
-    // ================= SEEN =================
-
-    private static Map<String, Instant> loadSeen() throws Exception {
+    private static Map<String, Instant> loadSeen() {
         Map<String, Instant> map = new HashMap<>();
-
         try {
             for (String line : Files.readAllLines(Paths.get("seen.txt"))) {
                 String[] p = line.split(",");
                 map.put(p[0], Instant.parse(p[1]));
             }
         } catch (Exception ignored) {}
-
         return map;
     }
 
@@ -298,12 +252,10 @@ public class Main {
 
         List<Map.Entry<String, Instant>> entries = new ArrayList<>(seen.entrySet());
 
-        // ✅ новые записи сверху
         entries.sort((a, b) -> b.getValue().compareTo(a.getValue()));
 
-        int MAX_SIZE = 2000;
-        if (entries.size() > MAX_SIZE) {
-            entries = entries.subList(0, MAX_SIZE);
+        if (entries.size() > 1000) {
+            entries = entries.subList(0, 1000);
         }
 
         List<String> lines = new ArrayList<>();
@@ -318,16 +270,13 @@ public class Main {
     private static void cleanup(Map<String, Instant> seen) {
 
         Instant now = Instant.now();
-
         int before = seen.size();
 
         seen.entrySet().removeIf(e ->
                 e.getValue().isBefore(now.minus(TTL))
         );
 
-        int after = seen.size();
-
-        log("🧹 Cleanup removed: " + (before - after));
+        log("🧹 Cleanup removed: " + (before - seen.size()));
     }
 
     private static void log(String msg) {
