@@ -2,10 +2,12 @@ name: Flashfood Bot
 
 on:
   schedule:
-    # 08:00–19:59 Detroit (UTC-4 → 12:00–23:59 UTC)
-    - cron: "*/3 12-23 * * *"
+    - cron: "0 12 * * *"  # 08:00 Detroit
+    - cron: "0 16 * * *"  # 12:00 Detroit
+    - cron: "0 20 * * *"  # 16:00 Detroit
 
   workflow_dispatch:
+
 
 jobs:
   run:
