@@ -20,25 +20,31 @@ jobs:
       cancel-in-progress: true
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repo
+        uses: actions/checkout@v4
 
+      # ✅ Загрузить seen.txt из state branch
       - name: Load seen.txt
         run: |
-          git fetch origin state || true
-          git checkout origin/state -- flash/seen.txt || true
+          git fetch origin state || echo "no remote state yet"
+          git checkout origin/state -- flash/seen.txt || echo "no seen.txt yet"
 
-      - name: Cache Maven
+      # ✅ Maven cache
+      - name: Cache Maven dependencies
         uses: actions/cache@v4
         with:
           path: ~/.m2/repository
-          key: maven-${{ hashFiles('flash/pom.xml') }}
+          key: maven-${{ runner.os }}-${{ hashFiles('flash/pom.xml') }}
+          restore-keys: |
+            maven-${{ runner.os }}-
 
-      - uses: actions/setup-java@v4
+      - name: Set up Java
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
 
-      - name: Build
+      - name: Build project
         run: mvn package -q
         working-directory: flash
 
@@ -53,14 +59,24 @@ jobs:
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: java -jar target/*.jar
 
-      - name: Save seen.txt
+      # ✅ Сохранить seen.txt безопасно (без конфликтов)
+      - name: Save seen.txt to state branch
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
 
+          # забираем актуальное состояние
+          git fetch origin state || echo "no remote state yet"
+
+          # переключаемся на state
           git checkout -B state
 
+          # подтягиваем последние изменения (важно против конфликтов)
+          git pull origin state --rebase || echo "no remote state yet"
+
+          # добавляем обновлённый файл
           git add flash/seen.txt
+
           git diff --cached --quiet || git commit -m "Update seen.txt"
 
           git push origin state
