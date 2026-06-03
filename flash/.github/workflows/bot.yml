@@ -1,0 +1,49 @@
+name: Flashfood Bot
+
+on:
+  schedule:
+    # 08:00–19:59 Chicago (13:00–23:59 UTC)
+    - cron: "*/3 13-23 * * *"
+
+    # 20:00–20:59 Chicago (00:00–01:59 UTC)
+    - cron: "*/3 0-1 * * *"
+
+  workflow_dispatch:
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Set up Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Build project
+        run: mvn clean package
+
+      - name: Run bot
+        env:
+          CLIENT_ID: ${{ secrets.CLIENT_ID }}
+          REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
+          FF_USERNAME: ${{ secrets.FF_USERNAME }}
+          FF_PASSWORD: ${{ secrets.FF_PASSWORD }}
+          TG_TOKEN: ${{ secrets.TG_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+        run: java -jar target/*.jar
+
+      - name: Commit seen.txt
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+
+          git add seen.txt
+
+          git diff --cached --quiet || git commit -m "Update seen.txt"
+
+          git push

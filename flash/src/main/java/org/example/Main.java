@@ -35,8 +35,12 @@ public class Main {
 
         log("📦 Total items: " + items.size());
 
-        // ✅ сортировка (Holland first)
-        items.sort(Comparator.comparing(Main::getStorePriority));
+        // ✅ сортировка: Holland first + cheapest first
+        items.sort(
+                Comparator
+                        .comparing(Main::getStorePriority)
+                        .thenComparing(item -> Double.parseDouble(item.get("price").toString()))
+        );
 
         Instant now = Instant.now();
 
@@ -59,7 +63,7 @@ public class Main {
                 try {
                     sendPhoto(item);
                     log("✅ Sent: " + name);
-                    Thread.sleep(300); // ✅ anti-rate-limit
+                    Thread.sleep(300);
                 } catch (Exception e) {
                     log("❌ Telegram failed: " + e.getMessage());
                 }
@@ -79,8 +83,10 @@ public class Main {
 
     private static String resolveToken() throws Exception {
         try {
+            log("Using refresh token...");
             return refreshToken();
         } catch (Exception e) {
+            log("Refresh failed → full login...");
             return loginToken();
         }
     }
@@ -175,18 +181,16 @@ public class Main {
         if ((name.contains("fruit bundle")
                 || name.contains("veggie bundle")
                 || name.contains("mixed produce bundle")
-                || name.contains("produce bundle"))
-        )
+                || name.contains("produce bundle")))
             return price <= 3.01;
 
-        if ((name.contains("kombucha")
-        ))
+        if (name.contains("kombucha"))
             return price <= 2;
-        if ((name.contains("mushrooms")
-        ))
+
+        if (name.contains("mushrooms"))
             return price <= 2;
-        if ((name.contains("pork loin")
-        ))
+
+        if (name.contains("pork loin"))
             return price <= 10;
 
         if ((name.contains("fish") || name.contains("salmon")))
@@ -224,7 +228,8 @@ public class Main {
         String name = item.get("name").toString();
         double price = Double.parseDouble(item.get("price").toString());
         String store = item.get("storeName").toString();
-        int qty = Integer.parseInt(item.get("quantityAvailable").toString());
+
+        String priceStr = String.format("%.2f", price);
 
         Long bestBefore = Long.parseLong(item.get("bestBeforeDate").toString());
         String expiry = formatDate(bestBefore);
@@ -236,12 +241,10 @@ public class Main {
                 : item.get("imageUrl").toString();
 
         String caption =
-                "🔥 DEAL\n\n" +
-                        name + "\n" +
-                        "$" + price + "\n" +
+                "$" + priceStr + "\n" +
                         "📍 " + store + "\n" +
-                        "📦 Qty: " + qty + "\n" +
-                        "🗓 Best before: " + expiry;
+                        name + "\n" +
+                        "🗓 " + expiry;
 
         String url = "https://api.telegram.org/bot"
                 + System.getenv("TG_TOKEN")
