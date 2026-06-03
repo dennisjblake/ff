@@ -74,14 +74,14 @@ public class Main {
 
             if (seen.containsKey(id)) continue;
 
-            if (isInteresting(name, price)) {
+            if (isInteresting(name, price, item)) {
 
                 log("🔥 MATCH: " + name);
 
                 try {
                     sendPhoto(item);
                     log("✅ Sent: " + name);
-                    Thread.sleep(300);
+                    Thread.sleep(800); // стабильно для Telegram
                 } catch (Exception e) {
                     log("❌ Telegram failed: " + e.getMessage());
                 }
@@ -96,14 +96,22 @@ public class Main {
 
         log("📊 Stats:");
         log("Checked: " + totalChecked);
-        log("Sent: " + matches);
-        log("Seen total: " + seen.size());
+
+        if (matches == 0) {
+            log("ℹ️ No new deals. Seen total: " + seen.size());
+        } else {
+            log("✅ Sent: " + matches);
+        }
     }
+
+    // ================= TOKEN =================
 
     private static String resolveToken() throws Exception {
         try {
+            log("Using refresh token...");
             return refreshToken();
         } catch (Exception e) {
+            log("Refresh failed → full login...");
             return loginToken();
         }
     }
@@ -150,6 +158,8 @@ public class Main {
         return (String) json.get("access_token");
     }
 
+    // ================= FETCH =================
+
     private static List<Map<String, Object>> fetchItems(String token) throws Exception {
 
         HttpRequest req = HttpRequest.newBuilder()
@@ -184,29 +194,50 @@ public class Main {
         return result;
     }
 
-    private static boolean isInteresting(String name, double price) {
+    // ================= FILTER =================
+
+    private static boolean isInteresting(String name, double price, Map<String, Object> item) {
 
         name = name.toLowerCase();
+        String storeId = item.get("storeId").toString();
 
-        if (name.contains("bundle")) return price <= 3.01;
-        if (name.contains("kombucha") || name.contains("mushrooms")) return price <= 2;
+        boolean isProduce =
+                name.contains("fruit bundle") ||
+                name.contains("veggie bundle") ||
+                name.contains("mixed produce bundle") ||
+                name.contains("produce bundle");
+
+        if (isProduce) {
+            return isHolland(storeId) ? price <= 5.01 : price <= 3.01;
+        }
+
+        if (name.contains("kombucha")) return price <= 2;
+        if (name.contains("mushrooms")) return price <= 2;
         if (name.contains("pork")) return price <= 10;
         if (name.contains("fish") || name.contains("salmon")) return price <= 5;
 
         return false;
     }
 
-    private static int getStorePriority(Map<String, Object> item) {
-        String id = item.get("storeId").toString();
-        if (id.equals("5f766e5d21b06610425b1851")) return 1;
-        return 100;
+    private static boolean isHolland(String storeId) {
+        return storeId.equals("5f766e5d21b06610425b1851") ||
+               storeId.equals("5f766e5d21b06610425b183e");
     }
+
+    // ================= SORT =================
+
+    private static int getStorePriority(Map<String, Object> item) {
+        return isHolland(item.get("storeId").toString()) ? 1 : 100;
+    }
+
+    // ================= TELEGRAM =================
 
     private static void sendPhoto(Map<String, Object> item) throws Exception {
 
+        HttpClient client = HttpClient.newHttpClient();
+
         String price = String.format("%.2f",
-                Double.parseDouble(item.get("price").toString())
-        );
+                Double.parseDouble(item.get("price").toString()));
 
         String caption =
                 "$" + price + "\n" +
@@ -221,14 +252,16 @@ public class Main {
                 + "&photo=" + item.get("imageUrl")
                 + "&caption=" + caption;
 
-        HttpClient.newHttpClient().send(
+        HttpResponse<String> response = client.send(
                 HttpRequest.newBuilder()
                         .uri(URI.create(url))
                         .header("Content-Type", "application/x-www-form-urlencoded")
                         .POST(HttpRequest.BodyPublishers.ofString(body))
                         .build(),
-                HttpResponse.BodyHandlers.discarding()
+                HttpResponse.BodyHandlers.ofString()
         );
+
+        log("Telegram response: " + response.statusCode());
     }
 
     private static String formatDate(Long ts) {
@@ -237,14 +270,18 @@ public class Main {
                 .toLocalDate().toString();
     }
 
+    // ================= SEEN =================
+
     private static Map<String, Instant> loadSeen() {
         Map<String, Instant> map = new HashMap<>();
+
         try {
             for (String line : Files.readAllLines(Paths.get("seen.txt"))) {
                 String[] p = line.split(",");
                 map.put(p[0], Instant.parse(p[1]));
             }
         } catch (Exception ignored) {}
+
         return map;
     }
 
