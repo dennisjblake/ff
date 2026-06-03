@@ -20,7 +20,7 @@ public class Main {
                     "&storeIds=5f766e5d21b06610425b1842" +
                     "&storeIds=5f766e5d21b06610425b1848";
 
-    private static final Duration TTL = Duration.ofDays(4);
+    private static final Duration TTL = Duration.ofDays(5);
 
     public static void main(String[] args) throws Exception {
 
@@ -45,8 +45,11 @@ public class Main {
         Instant now = Instant.now();
 
         int matches = 0;
+        int totalChecked = 0;
 
         for (Map<String, Object> item : items) {
+
+            totalChecked++;
 
             String id = item.get("id").toString();
             String name = item.get("name").toString();
@@ -76,7 +79,12 @@ public class Main {
 
         saveSeen(seen);
 
-        log("✅ Done. Matches: " + matches);
+        log("📊 Stats:");
+        log("Checked: " + totalChecked);
+        log("Sent: " + matches);
+        log("Seen total: " + seen.size());
+
+        log("✅ Done.");
     }
 
     // ================= TOKEN =================
@@ -189,11 +197,14 @@ public class Main {
 
         if (name.contains("mushrooms"))
             return price <= 2;
-
-        if (name.contains("pork loin"))
+        if (name.contains("steak"))
+            return price <= 10;
+        if (name.contains("pork"))
+            return price <= 10;
+        if (name.contains("ribs"))
             return price <= 10;
 
-        if ((name.contains("fish") || name.contains("salmon")))
+        if (name.contains("fish") || name.contains("salmon"))
             return price <= 5;
 
         return false;
@@ -285,9 +296,19 @@ public class Main {
 
     private static void saveSeen(Map<String, Instant> seen) throws Exception {
 
+        List<Map.Entry<String, Instant>> entries = new ArrayList<>(seen.entrySet());
+
+        // ✅ новые записи сверху
+        entries.sort((a, b) -> b.getValue().compareTo(a.getValue()));
+
+        int MAX_SIZE = 2000;
+        if (entries.size() > MAX_SIZE) {
+            entries = entries.subList(0, MAX_SIZE);
+        }
+
         List<String> lines = new ArrayList<>();
 
-        for (var e : seen.entrySet()) {
+        for (var e : entries) {
             lines.add(e.getKey() + "," + e.getValue());
         }
 
@@ -298,9 +319,15 @@ public class Main {
 
         Instant now = Instant.now();
 
+        int before = seen.size();
+
         seen.entrySet().removeIf(e ->
                 e.getValue().isBefore(now.minus(TTL))
         );
+
+        int after = seen.size();
+
+        log("🧹 Cleanup removed: " + (before - after));
     }
 
     private static void log(String msg) {
