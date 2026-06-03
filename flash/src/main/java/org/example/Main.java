@@ -28,6 +28,13 @@ public class Main {
 
         for (int i = 0; i < 80; i++) {
 
+            // ✅ graceful stop after 20:00 Detroit
+            int hour = ZonedDateTime.now(ZoneId.of("America/Detroit")).getHour();
+            if (hour >= 20) {
+                log("🛑 Stopping: outside working hours (after 20:00)");
+                break;
+            }
+
             try {
                 runOnce();
             } catch (Exception e) {
@@ -40,7 +47,7 @@ public class Main {
             }
         }
 
-        log("✅ 4-hour session finished");
+        log("✅ Session finished gracefully");
     }
 
     private static void runOnce() throws Exception {
@@ -72,6 +79,7 @@ public class Main {
             String name = item.get("name").toString();
             double price = Double.parseDouble(item.get("price").toString());
 
+            // ✅ skip already processed interesting items
             if (seen.containsKey(id)) continue;
 
             if (isInteresting(name, price, item)) {
@@ -81,15 +89,16 @@ public class Main {
                 try {
                     sendPhoto(item);
                     log("✅ Sent: " + name);
-                    Thread.sleep(800); // стабильно для Telegram
+                    Thread.sleep(800);
                 } catch (Exception e) {
                     log("❌ Telegram failed: " + e.getMessage());
                 }
 
                 matches++;
-            }
 
-            seen.put(id, now);
+                // ✅ store only interesting items
+                seen.put(id, now);
+            }
         }
 
         saveSeen(seen);
@@ -234,8 +243,6 @@ public class Main {
 
     private static void sendPhoto(Map<String, Object> item) throws Exception {
 
-        HttpClient client = HttpClient.newHttpClient();
-
         String price = String.format("%.2f",
                 Double.parseDouble(item.get("price").toString()));
 
@@ -252,7 +259,7 @@ public class Main {
                 + "&photo=" + item.get("imageUrl")
                 + "&caption=" + caption;
 
-        HttpResponse<String> response = client.send(
+        HttpResponse<String> response = HttpClient.newHttpClient().send(
                 HttpRequest.newBuilder()
                         .uri(URI.create(url))
                         .header("Content-Type", "application/x-www-form-urlencoded")
@@ -274,14 +281,12 @@ public class Main {
 
     private static Map<String, Instant> loadSeen() {
         Map<String, Instant> map = new HashMap<>();
-
         try {
             for (String line : Files.readAllLines(Paths.get("seen.txt"))) {
                 String[] p = line.split(",");
                 map.put(p[0], Instant.parse(p[1]));
             }
         } catch (Exception ignored) {}
-
         return map;
     }
 
