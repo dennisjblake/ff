@@ -26,6 +26,7 @@ jobs:
 
       - name: Build project
         run: mvn clean package
+        working-directory: ff
 
       - name: Run bot
         env:
@@ -35,6 +36,7 @@ jobs:
           FF_PASSWORD: ${{ secrets.FF_PASSWORD }}
           TG_TOKEN: ${{ secrets.TG_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+        working-directory: ff
         run: java -jar target/*.jar
 
       - name: Commit seen.txt
