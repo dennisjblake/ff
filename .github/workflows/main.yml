@@ -2,9 +2,9 @@ name: Flashfood Bot
 
 on:
   schedule:
-    # 08:00–19:59 Detroit (12:00–23:59 UTC)
+    # 08:00–19:59 Detroit (UTC-4 → 12:00–23:59 UTC)
     - cron: "*/3 12-23 * * *"
-    
+
   workflow_dispatch:
 
 jobs:
@@ -18,6 +18,18 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v3
 
+      # ✅ подтягиваем seen.txt из branch state
+      - name: Load seen.txt from state branch
+        run: |
+          git fetch origin state || echo "no state branch yet"
+
+          if git show-ref --verify --quiet refs/remotes/origin/state; then
+            git checkout origin/state -- flash/seen.txt || echo "no seen.txt in state"
+          else
+            echo "state branch does not exist yet"
+          fi
+
+      # ✅ кеш для Maven (ускоряет сильно)
       - name: Cache Maven dependencies
         uses: actions/cache@v3
         with:
@@ -47,14 +59,18 @@ jobs:
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: java -jar target/*.jar
 
-      - name: Commit seen.txt
+      # ✅ сохраняем seen.txt в отдельную ветку
+      - name: Save seen.txt to state branch
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
 
+          git fetch origin state || echo "no state branch yet"
+
+          git checkout state || git checkout -b state
+
           git add flash/seen.txt
 
-          git commit --amend --no-edit || echo "No changes"
+          git diff --cached --quiet || git commit -m "Update seen.txt"
 
-          git push --force
-``
+          git push origin state
