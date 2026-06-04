@@ -3,15 +3,9 @@ package org.example;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.time.Duration;
-import java.time.Instant;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
+import java.net.http.*;
+import java.nio.file.*;
+import java.time.*;
 import java.util.*;
 
 public class Main {
@@ -28,17 +22,23 @@ public class Main {
 
     private static final Duration TTL = Duration.ofDays(4);
 
+    private static final Instant startTime = Instant.now();
+    private static Instant lastSummaryTime = Instant.now();
+
+    private static final Set<String> printedStores = new HashSet<>();
+
     public static void main(String[] args) throws Exception {
 
-        log("🚀 Starting Flashfood 4-hour session...");
+        log("🚀 Flashfood bot started (infinite mode)");
 
-        for (int i = 0; i < 10000; i++) {
+        while (true) {
 
             int hour = ZonedDateTime.now(ZoneId.of("America/Detroit")).getHour();
 
-            if (hour >= 20) {
-                log("🛑 Stopping: outside working hours (after 20:00)");
-                break;
+            if (hour >= 20 || hour < 8) {
+                log("🌙 Outside working hours → sleeping 5 min...");
+                Thread.sleep(300_000);
+                continue;
             }
 
             try {
@@ -47,13 +47,9 @@ public class Main {
                 log("❌ Error: " + e.getMessage());
             }
 
-            if (i < 79) {
-                log("⏳ Sleeping 3 minutes...");
-                Thread.sleep(180_000);
-            }
+            log("⏳ Sleeping 3 minutes...");
+            Thread.sleep(180_000);
         }
-
-        log("✅ Session finished gracefully");
     }
 
     private static void runOnce() throws Exception {
@@ -75,19 +71,22 @@ public class Main {
 
         items.sort(
                 Comparator
-                        .comparing(Main::getStorePriority)
-                        .thenComparing(item -> Double.parseDouble(item.get("price").toString()))
+                        .comparing((Map<String, Object> i) -> getStorePriority(i))
+                        .thenComparing(i -> Double.parseDouble(i.get("price").toString()))
         );
 
-        Instant now = Instant.now();
-
-        int matches = 0;
         int totalChecked = 0;
+        int matches = 0;
         int skipped = 0;
+
+        Instant now = Instant.now();
 
         for (Map<String, Object> item : items) {
 
             totalChecked++;
+
+            if (item.get("id") == null || item.get("name") == null || item.get("price") == null)
+                continue;
 
             String id = item.get("id").toString();
             String name = item.get("name").toString();
@@ -98,35 +97,61 @@ public class Main {
                 continue;
             }
 
-            if (isInteresting(name, price, item)) {
+            if (!isInteresting(name, price)) continue;
 
-                log("🔥 MATCH: " + name + " | $" + price + " | " + item.get("storeName"));
+            log("🔥 MATCH: " + name + " | $" + price + " | " + item.get("storeName"));
 
-                try {
-                    sendPhoto(item);
-                    log("✅ Sent: " + name);
-                    Thread.sleep(800);
-                } catch (Exception e) {
-                    log("❌ Telegram failed: " + e.getMessage());
-                }
-
-                matches++;
-                seen.put(id, now);
+            try {
+                sendPhoto(item);
+                log("✅ Sent: " + name);
+                Thread.sleep(800);
+            } catch (Exception e) {
+                log("❌ Telegram failed: " + e.getMessage());
             }
+
+            seen.put(id, now);
+            matches++;
         }
 
         saveSeen(seen);
 
         log("📊 Checked: " + totalChecked);
-        log("⏭ Skipped (already seen): " + skipped);
+        log("⏭ Skipped: " + skipped);
 
         if (matches == 0) {
-            log("ℹ️ No new deals. Seen total: " + seen.size());
+            log("✅ Alive | Seen: " + seen.size());
         } else {
-            log("✅ Sent: " + matches);
+            log("✅ Matches: " + matches);
         }
 
-        log("🟢 Loop heartbeat | Seen: " + seen.size());
+        sendSummaryIfNeeded(totalChecked, matches, seen.size());
+    }
+
+    // ================= FILTER =================
+
+    private static boolean isInteresting(String name, double price) {
+
+        name = name.toLowerCase();
+
+        boolean isBundle =
+                name.contains("bundle") &&
+                        (name.contains("fruit") ||
+                                name.contains("veggie") ||
+                                name.contains("produce"));
+
+        return isBundle && price <= 5.01;
+    }
+
+    // ================= PRIORITY =================
+
+    private static boolean isHolland(String storeId) {
+        return storeId.equals("5f766e5d21b06610425b1851") ||
+                storeId.equals("5f766e5d21b06610425b183e");
+    }
+
+    private static int getStorePriority(Map<String, Object> item) {
+        String storeId = String.valueOf(item.get("storeId"));
+        return isHolland(storeId) ? 1 : 100;
     }
 
     // ================= TOKEN =================
@@ -134,13 +159,11 @@ public class Main {
     private static String resolveToken() throws Exception {
         try {
             String token = refreshToken();
-            log("🔑 Token source: REFRESH");
+            log("🔑 Token: REFRESH");
             return token;
         } catch (Exception e) {
-            log("⚠️ Refresh failed → full login...");
-            String token = loginToken();
-            log("🔑 Token source: LOGIN");
-            return token;
+            log("⚠️ Refresh failed → LOGIN");
+            return loginToken();
         }
     }
 
@@ -150,7 +173,7 @@ public class Main {
                 + "&client_id=" + System.getenv("CLIENT_ID")
                 + "&refresh_token=" + System.getenv("REFRESH_TOKEN");
 
-        HttpResponse<String> response = HttpClient.newHttpClient().send(
+        HttpResponse<String> res = HttpClient.newHttpClient().send(
                 HttpRequest.newBuilder()
                         .uri(URI.create(TOKEN_URL))
                         .header("Content-Type", "application/x-www-form-urlencoded")
@@ -159,10 +182,9 @@ public class Main {
                 HttpResponse.BodyHandlers.ofString()
         );
 
-        log("🔐 Refresh status: " + response.statusCode());
+        log("🔐 Refresh status: " + res.statusCode());
 
-        Map json = new ObjectMapper().readValue(response.body(), Map.class);
-        return (String) json.get("access_token");
+        return (String) new ObjectMapper().readValue(res.body(), Map.class).get("access_token");
     }
 
     private static String loginToken() throws Exception {
@@ -175,7 +197,7 @@ public class Main {
                 "\"scope\":\"offline_access openid profile email\"," +
                 "\"username\":\"" + System.getenv("FF_USERNAME") + "\"}";
 
-        HttpResponse<String> response = HttpClient.newHttpClient().send(
+        HttpResponse<String> res = HttpClient.newHttpClient().send(
                 HttpRequest.newBuilder()
                         .uri(URI.create(TOKEN_URL))
                         .header("Content-Type", "application/json")
@@ -184,17 +206,16 @@ public class Main {
                 HttpResponse.BodyHandlers.ofString()
         );
 
-        log("🔐 Login status: " + response.statusCode());
+        log("🔐 Login status: " + res.statusCode());
 
-        Map json = new ObjectMapper().readValue(response.body(), Map.class);
-        return (String) json.get("access_token");
+        return (String) new ObjectMapper().readValue(res.body(), Map.class).get("access_token");
     }
 
     // ================= FETCH =================
 
     private static List<Map<String, Object>> fetchItems(String token) throws Exception {
 
-        HttpResponse<String> response = HttpClient.newHttpClient().send(
+        HttpResponse<String> res = HttpClient.newHttpClient().send(
                 HttpRequest.newBuilder()
                         .uri(URI.create(API_URL))
                         .header("Authorization", "Bearer " + token)
@@ -203,20 +224,17 @@ public class Main {
                 HttpResponse.BodyHandlers.ofString()
         );
 
-        if (response.statusCode() != 200) {
-            log("❌ API error: " + response.statusCode());
-        }
-
-        Map<String, Object> root = new ObjectMapper().readValue(response.body(), Map.class);
+        Map<String, Object> root = new ObjectMapper().readValue(res.body(), Map.class);
 
         List<Map<String, Object>> result = new ArrayList<>();
-
         List<Map<String, Object>> stores = (List<Map<String, Object>>) root.get("data");
 
         for (Map<String, Object> store : stores) {
 
-            String storeName = store.get("name").toString();
-            List<Map<String, Object>> items = (List<Map<String, Object>>) store.get("items");
+            String storeName = String.valueOf(store.get("name"));
+
+            List<Map<String, Object>> items =
+                    (List<Map<String, Object>>) store.get("items");
 
             if (items == null) continue;
 
@@ -226,60 +244,18 @@ public class Main {
                 result.add(enriched);
             }
         }
+
         return result;
-    }
-
-    // ================= FILTER =================
-
-    private static boolean isInteresting(String name, double price, Map<String, Object> item) {
-
-        name = name.toLowerCase();
-
-        boolean isProduce =
-                name.contains("bundle") &&
-                        (name.contains("fruit") ||
-                                name.contains("veggie") ||
-                                name.contains("produce"));
-
-        if (isProduce) {
-            log("✅ PRODUCE MATCH: " + name + " | $" + price);
-            return price <= 5.01;
-        }
-
-        if (name.contains("kombucha")) return price <= 2;
-        if (name.contains("mushrooms")) return price <= 2;
-        if (name.contains("pork")) return price <= 10;
-        if (name.contains("fish") || name.contains("salmon")) return price <= 5;
-
-        return false;
-    }
-
-
-    private static boolean isHolland(String storeId) {
-        return storeId.equals("5f766e5d21b06610425b1851") ||
-                storeId.equals("5f766e5d21b06610425b183e")
-                ;
-    }
-
-    private static int getStorePriority(Map<String, Object> item) {
-        return isHolland(item.get("storeId").toString()) ? 1 : 100;
     }
 
     // ================= TELEGRAM =================
 
     private static void sendPhoto(Map<String, Object> item) throws Exception {
 
-        String price = String.format("%.2f",
-                Double.parseDouble(item.get("price").toString()));
-
         String caption =
-                "$" + price + "\n" +
-                        "📍 " + item.get("storeName") + "\n" +
-                        item.get("name") + "\n" +
-                        "🗓 " + formatDate(Long.parseLong(item.get("bestBeforeDate").toString()));
-
-        String url = "https://api.telegram.org/bot"
-                + System.getenv("TG_TOKEN") + "/sendPhoto";
+                "$" + item.get("price") + "\n" +
+                        item.get("storeName") + "\n" +
+                        item.get("name");
 
         String body = "chat_id=" + System.getenv("TG_CHAT_ID")
                 + "&photo=" + item.get("imageUrl")
@@ -287,23 +263,57 @@ public class Main {
 
         HttpResponse<String> response = HttpClient.newHttpClient().send(
                 HttpRequest.newBuilder()
-                        .uri(URI.create(url))
+                        .uri(URI.create("https://api.telegram.org/bot"
+                                + System.getenv("TG_TOKEN") + "/sendPhoto"))
                         .header("Content-Type", "application/x-www-form-urlencoded")
                         .POST(HttpRequest.BodyPublishers.ofString(body))
                         .build(),
                 HttpResponse.BodyHandlers.ofString()
         );
 
-        log("📡 Telegram status: " + response.statusCode());
+        log("📡 Telegram: " + response.statusCode());
     }
 
-    private static String formatDate(Long ts) {
-        return Instant.ofEpochSecond(ts)
-                .atZone(ZoneId.of("America/Detroit"))
-                .toLocalDate().toString();
+    private static void sendMessage(String text) throws Exception {
+
+        String body = "chat_id=" + System.getenv("TG_CHAT_ID")
+                + "&text=" + text;
+
+        HttpClient.newHttpClient().send(
+                HttpRequest.newBuilder()
+                        .uri(URI.create("https://api.telegram.org/bot"
+                                + System.getenv("TG_TOKEN") + "/sendMessage"))
+                        .header("Content-Type", "application/x-www-form-urlencoded")
+                        .POST(HttpRequest.BodyPublishers.ofString(body))
+                        .build(),
+                HttpResponse.BodyHandlers.ofString()
+        );
     }
 
-    // ================= SEEN =================
+    // ================= SUMMARY =================
+
+    private static void sendSummaryIfNeeded(int checked, int matches, int seenSize) {
+
+        Instant now = Instant.now();
+
+        if (Duration.between(lastSummaryTime, now).toMinutes() < 30) return;
+
+        lastSummaryTime = now;
+
+        try {
+            String text =
+                    (matches > 0 ? "🔥 Active" : "✅ Alive") + "\n" +
+                            "Checked: " + checked + "\n" +
+                            "Matched: " + matches + "\n" +
+                            "Seen: " + seenSize;
+
+            sendMessage(text);
+            log("📨 Summary sent");
+
+        } catch (Exception e) {
+            log("❌ Summary error: " + e.getMessage());
+        }
+    }
 
     private static Map<String, Instant> loadSeen() {
         Map<String, Instant> map = new HashMap<>();
@@ -336,7 +346,6 @@ public class Main {
     }
 
     private static void cleanup(Map<String, Instant> seen) {
-
         Instant now = Instant.now();
         int before = seen.size();
 
@@ -344,7 +353,7 @@ public class Main {
                 e.getValue().isBefore(now.minus(TTL))
         );
 
-        log("🧹 Cleanup removed: " + (before - seen.size()));
+        log("🧹 Removed: " + (before - seen.size()));
     }
 
     private static void log(String msg) {
