@@ -15,19 +15,15 @@ jobs:
     permissions:
       contents: write
 
-    concurrency:
-      group: flashfood-bot
-      cancel-in-progress: true
-
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      # ✅ Загрузить seen.txt из state branch
-      - name: Load seen.txt
+      # ✅ Загрузка current state
+      - name: Load seen.txt from state
         run: |
-          git fetch origin state || echo "no remote state yet"
-          git checkout origin/state -- flash/seen.txt || echo "no seen.txt yet"
+          git fetch origin state || true
+          git checkout origin/state -- flash/seen.txt || echo "No existing state"
 
       # ✅ Maven cache
       - name: Cache Maven dependencies
@@ -59,22 +55,33 @@ jobs:
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: java -jar target/*.jar
 
-      # ✅ Сохранить seen.txt безопасно (без конфликтов)
+      # ✅ SAFE STATE SAVE (финальный стабильный вариант)
       - name: Save seen.txt to state branch
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
 
-          # забираем актуальное состояние
-          git fetch origin state || echo "no remote state yet"
+          # сохраняем текущий seen.txt
+          cp flash/seen.txt /tmp/seen.txt
 
-          # переключаемся на state
-          git checkout -B state
+          # берём свежий state
+          git fetch origin state || true
 
-          # подтягиваем последние изменения (важно против конфликтов)
-          git pull origin state --rebase || echo "no remote state yet"
+          # создаём/обновляем branch
+          if git show-ref --verify --quiet refs/remotes/origin/state; then
+            git checkout -B state origin/state
+          else
+            git checkout -B state
+          fi
 
-          # добавляем обновлённый файл
+          # очищаем рабочее дерево
+          git reset --hard
+          git clean -fd
+
+          # возвращаем файл
+          mkdir -p flash
+          cp /tmp/seen.txt flash/seen.txt
+
           git add flash/seen.txt
 
           git diff --cached --quiet || git commit -m "Update seen.txt"
