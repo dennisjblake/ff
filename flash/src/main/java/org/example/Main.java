@@ -3,8 +3,11 @@ package org.example;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.net.URI;
-import java.net.http.*;
-import java.nio.file.*;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.time.*;
 import java.util.*;
 
@@ -22,10 +25,7 @@ public class Main {
 
     private static final Duration TTL = Duration.ofDays(4);
 
-    private static final Instant startTime = Instant.now();
     private static Instant lastSummaryTime = Instant.now();
-
-    private static final Set<String> printedStores = new HashSet<>();
 
     public static void main(String[] args) throws Exception {
 
@@ -223,7 +223,6 @@ public class Main {
                         .build(),
                 HttpResponse.BodyHandlers.ofString()
         );
-
         Map<String, Object> root = new ObjectMapper().readValue(res.body(), Map.class);
 
         List<Map<String, Object>> result = new ArrayList<>();
@@ -252,10 +251,27 @@ public class Main {
 
     private static void sendPhoto(Map<String, Object> item) throws Exception {
 
+        long ts = Long.parseLong(item.get("bestBeforeDate").toString());
+        LocalDate dueDate = Instant.ofEpochSecond(ts)
+                .atZone(ZoneId.of("America/Detroit"))
+                .toLocalDate();
+
+        LocalDate today = LocalDate.now(ZoneId.of("America/Detroit"));
+
+        String urgency = "";
+        if (dueDate.equals(today)) {
+            urgency = "🔥 EXPIRES TODAY\n";
+        } else if (dueDate.equals(today.plusDays(1))) {
+            urgency = "⚠️ Expires tomorrow\n";
+        }
+
         String caption =
-                "$" + item.get("price") + "\n" +
+                urgency +
+                        "$" + item.get("price") + "\n" +
                         item.get("storeName") + "\n" +
-                        item.get("name");
+                        item.get("name") + "\n" +
+                        "Best before: " + dueDate;
+
 
         String body = "chat_id=" + System.getenv("TG_CHAT_ID")
                 + "&photo=" + item.get("imageUrl")
@@ -296,7 +312,7 @@ public class Main {
 
         Instant now = Instant.now();
 
-        if (Duration.between(lastSummaryTime, now).toMinutes() < 30) return;
+        if (Duration.between(lastSummaryTime, now).toMinutes() < 60) return;
 
         lastSummaryTime = now;
 
@@ -322,7 +338,8 @@ public class Main {
                 String[] p = line.split(",");
                 map.put(p[0], Instant.parse(p[1]));
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
         return map;
     }
 
