@@ -254,7 +254,8 @@ public class Main {
         long ts = Long.parseLong(item.get("bestBeforeDate").toString());
         LocalDate dueDate = Instant.ofEpochSecond(ts)
                 .atZone(ZoneId.of("America/Detroit"))
-                .toLocalDate();
+                .toLocalDate()
+                .plusDays(1);
 
         LocalDate today = LocalDate.now(ZoneId.of("America/Detroit"));
 
