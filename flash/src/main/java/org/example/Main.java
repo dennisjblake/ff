@@ -112,6 +112,23 @@ public class Main {
 
         name = name.toLowerCase();
 
+        // ✅ новые фильтры (приоритет выше)
+        if (name.contains("mushrooms"))
+            return price <= 2;
+
+        if (name.contains("steak"))
+            return price <= 10;
+
+        if (name.contains("pork"))
+            return price <= 10;
+
+        if (name.contains("ribs"))
+            return price <= 10;
+
+        if (name.contains("fish") || name.contains("salmon"))
+            return price <= 5;
+
+        // ✅ старая логика (bundle)
         boolean isBundle =
                 name.contains("bundle") &&
                         (name.contains("fruit") ||
